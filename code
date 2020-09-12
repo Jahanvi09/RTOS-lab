@@ -1,0 +1,111 @@
+#include <dht.h>
+#include <Arduino_FreeRTOS.h>
+
+//define task handles
+TaskHandle_t TaskTemp_Handler;
+TaskHandle_t TaskSerial_Handler;
+
+
+// define two tasks for Blink & Serial
+void TaskTemp( void *pvParameters );
+void TaskSerial(void* pvParameters);
+
+//For DH11 Sensor
+dht DHT;
+
+#define DHT11_PIN 7
+
+// the setup function runs once when you press reset or power the board
+void setup() {
+  // initialize serial communication at 9600 bits per second:
+  Serial.begin(9600);
+  // Hooked to IDle task, it will run whenever CPU is idle
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB, on LEONARDO, MICRO, YUN, and other 32u4 based boards.
+  }
+  
+  // Now set up two tasks to run independently.
+   xTaskCreate(
+    TaskTemp
+    ,  "Temp"   // A name just for humans
+    ,  128  // This stack size can be checked & adjusted by reading the Stack Highwater
+    ,  NULL //Parameters passed to the task function
+    ,  2  // Priority, with 2 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    ,  &TaskTemp_Handler );//Task handle
+
+   xTaskCreate(
+    TaskSerial
+    ,  "Serial"
+    ,  128  // Stack size
+    ,  NULL //Parameters passed to the task function
+    ,  1  // Priority
+    ,  &TaskSerial_Handler );  //Task handle
+
+    
+}
+    
+
+void loop()
+{
+  // Empty. Things are done in Tasks.
+}
+
+/*--------------------------------------------------*/
+/*---------------------- Tasks ---------------------*/
+/*--------------------------------------------------*/
+
+void TaskSerial(void* pvParameters){
+/*
+ Serial
+ Send "s" or "r" through the serial port to control the suspend and resume of the LED light task.
+ This example code is in the public domain.
+*/
+  (void) pvParameters;
+   for (;;) // A Task shall never return or exit.
+   {
+    while(Serial.available()>0){
+      switch(Serial.read()){
+        case 's':
+          vTaskSuspend(TaskTemp_Handler); 
+          Serial.println("Suspend!");
+          Serial.println("Prority(TaskTemp): "+ String(uxTaskPriorityGet(TaskTemp_Handler)));
+          break;
+        case 'r':
+          vTaskResume(TaskTemp_Handler);
+          Serial.println("Resume!");
+          Serial.println("Prority(TaskSerial) : "+ String(uxTaskPriorityGet(TaskSerial_Handler)));
+          break;
+        case 'a':
+          Serial.println("Inter Changing Prority!");
+          vTaskPrioritySet( TaskTemp_Handler , 1);
+          vTaskPrioritySet( TaskSerial_Handler , 2);
+          Serial.println("Prority(TaskTemp) :"+ String(uxTaskPriorityGet(TaskTemp_Handler)));
+          Serial.println("Prority(TaskSerial) : "+ String(uxTaskPriorityGet(TaskSerial_Handler)));
+          break;
+       case 'b':
+          Serial.println("Inter Changing Prority!");
+          vTaskPrioritySet( TaskTemp_Handler , 2);
+          vTaskPrioritySet( TaskSerial_Handler , 1);
+          Serial.println("Prority(TaskTemp) :"+ String(uxTaskPriorityGet(TaskTemp_Handler)));
+          Serial.println("Prority(TaskSerial) : "+ String(uxTaskPriorityGet(TaskSerial_Handler)));
+          break;
+      }
+      vTaskDelay(1);
+    }
+   }
+}
+
+void TaskTemp(void *pvParameters)  // This is a task.
+{
+  (void) pvParameters;
+  for (;;) // A Task shall never return or exit.
+  {
+    int chk = DHT.read11(DHT11_PIN);
+    Serial.print("Temperature = "); //print temperature and humidity
+    Serial.println(DHT.temperature);
+    Serial.print("Humidity = ");
+    Serial.println(DHT.humidity);
+    Serial.println();
+    vTaskDelay( 2000 / portTICK_PERIOD_MS ); // wait for two seconds
+  }
+}
